@@ -5,6 +5,7 @@ import { ErrorResponse } from './serverTypes.js';
 import { requestLogger, errorLogger, securityHeaders } from './middleware/common.js';
 import healthRoutes from './routes/healthRoutes.js';
 import apiRoutes from './routes/apiRoutes.js';
+import { databaseManager } from './services/database/index.js';
 
 // Create Express app
 const app: Application = express();
@@ -49,14 +50,50 @@ app.use((req: Request, res: Response<ErrorResponse>) => {
   });
 });
 
-// Start server
-app.listen(PORT, () => {
-  console.log('\n🎉 Business Vision AI Platform Started!');
-  console.log(`🚀 Server is running on port ${PORT}`);
-  console.log(`🌍 Environment: ${appConfig.NODE_ENV}`);
-  console.log(`📍 Health check: http://localhost:${PORT}/health`);
-  console.log(`📍 API status: http://localhost:${PORT}/api/status`);
-  console.log('='.repeat(50));
+// startup function to initialize services
+const startServer = async () => {
+
+  try {
+    console.log('\n🎉 Starting Business Vision AI Platform...');
+
+    console.log('\n🎉 Connecting to databases...');
+    // Connect to all databases first
+    await databaseManager.connectAllDatabases();
+    // Start the server
+    console.log('\n🎉 Starting server...');
+    app.listen(PORT, () => {
+      console.log('\n🎉 Business Vision AI Platform Started!');
+      console.log(`🚀 Server is running on port ${PORT}`);
+      console.log(`🌍 Environment: ${appConfig.NODE_ENV}`);
+      console.log(`📍 Health check: http://localhost:${PORT}/health`);
+      console.log(`📍 API status: http://localhost:${PORT}/api/status`);
+
+      // Log database connection status
+      const dbStatus = databaseManager.getConnectionStatus();
+      console.log('📊 Database Status:', dbStatus);
+      console.log('='.repeat(50));
+    });
+    //
+  } catch (error) {
+    console.error('❌ Failed to start server:', error);
+    process.exit(1);
+  }
+}
+
+// Graceful shutdown handlers
+process.on('SIGTERM', async () => {
+  console.log('\n🛑 SIGTERM received, shutting down gracefully...');
+  await databaseManager.disconnectAllDatabases();
+  process.exit(0);
 });
+
+process.on('SIGINT', async () => {
+  console.log('\n🛑 SIGINT received, shutting down gracefully...');
+  await databaseManager.disconnectAllDatabases();
+  process.exit(0);
+});
+
+// Start the server
+startServer();
 
 export default app;
